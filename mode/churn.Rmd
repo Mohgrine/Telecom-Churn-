@@ -1,0 +1,368 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(readxl)
+library(gridExtra)
+library(janitor)
+library(broom)
+```
+
+# importing the data
+```{r}
+churn <- read.csv("Telco-Customer-Churn.csv")
+glimpse(churn)
+```
+# get summary of the data
+```{r}
+churn <- churn %>% mutate(SeniorCitizen= ifelse(SeniorCitizen==1,"Yes","No"))
+churn <- churn %>% mutate_if(is.character,as.factor)
+churn <- churn %>% select(-1)
+churn<- clean_names(churn)
+summary(churn)
+```
+# EDA
+# 1. the distrubition of the numirical variables
+```{r}
+plot1 <- ggplot(churn,aes(x=monthly_charges,fill=churn ))+
+  geom_histogram(color="white")
+plot2 <-ggplot(churn,aes(x=total_charges,fill=churn ))+
+  geom_histogram(color="white")
+plot3 <-ggplot(churn,aes(x=tenure,fill=churn ))+
+  geom_histogram(color="white")
+grid.arrange(plot1,plot2,plot3,ncol=2)
+```
+#### In the first and second graphs, we observe a significant churn among clients with lower charges. Additionally, the third graph indicates that clients who stay with the company for a longer period are the ones lower likely to churn.
+
+# 2. the categorical variables
+```{r}
+plot1 <- ggplot(churn, aes(x=gender,fill=churn ))+
+  geom_bar(color="white")+
+  coord_flip()
+plot2 <- ggplot(churn, aes(x=senior_citizen,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot3 <- ggplot(churn, aes(x=dependents,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot4 <- ggplot(churn, aes(x=partner,fill=churn))+
+  geom_bar()+
+  coord_flip()
+grid.arrange(plot1,plot2,plot3,plot4,ncol=2)
+
+```
+#### ther is no significant impact of the dimographic factors on the churn
+
+
+```{r}
+plot1 <- ggplot(churn, aes(x=phone_service,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot2 <- ggplot(churn, aes(x=multiple_lines,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot3 <- ggplot(churn, aes(x=internet_service,fill=churn))+
+  geom_bar()+
+  coord_flip()
+grid.arrange(plot1,plot2,plot3,ncol=2)
+```
+#### We can see that there is no impact of multiple lines on churn. However, with internet service, we observe that clients using fiber optic are churning the most, indicating dissatisfaction with the service.
+
+```{r}
+plot1 <- ggplot(churn, aes(x=online_security,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot2 <- ggplot(churn, aes(x=online_backup,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot3 <- ggplot(churn, aes(x=device_protection,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot4 <- ggplot(churn, aes(x=tech_support,fill=churn))+
+  geom_bar()+
+  coord_flip()
+grid.arrange(plot1,plot2,plot3,plot4,ncol=2)
+```
+#### We can observe that the clients who are not subscribed to device protection, tech support, online backup, and security services are churning the most.
+
+
+```{r}
+plot1 <- ggplot(churn, aes(x=streaming_tv,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot2 <- ggplot(churn, aes(x=streaming_movies,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot3 <- ggplot(churn, aes(x=contract,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot4 <- ggplot(churn, aes(x=paperless_billing,fill=churn))+
+  geom_bar()+
+  coord_flip()
+grid.arrange(plot1,plot2,plot3,plot4,ncol=2)
+```
+#### The clients with month-to-month contracts are churning the most, and those who use paperless billing also exhibit the highest churn rate.
+
+
+```{r}
+plot1 <- ggplot(churn, aes(x=payment_method,fill=churn))+
+  geom_bar()+
+  coord_flip()
+plot4 <- ggplot(churn, aes(x=churn,fill=gender))+
+  geom_bar()+
+  coord_flip()
+grid.arrange(plot1,plot4)
+```
+#### the clients who use electronic check have the highest churn rate.
+
+# 2. the relationship between the target and the numerical variables.
+## monthly_charges
+```{r}
+churn %>% ggplot(aes(x=churn,y=monthly_charges))+
+  geom_boxplot(color="blue",fill="yellow",outlier.color = "red")
+```
+## total_charges
+```{r}
+churn %>% ggplot(aes(x=churn,y=total_charges))+
+  geom_boxplot(color="blue",fill="yellow",outlier.color = "red")
+```
+## tenure
+```{r}
+churn %>% ggplot(aes(x=churn,y=tenure))+
+  geom_boxplot(color="blue",fill="yellow",outlier.color = "red")
+```
+
+# data preproc
+### transforme the target variable and drop the mising values
+```{r}
+churn <- churn %>% mutate(churn= ifelse(churn=="Yes",1,0))
+churn <- churn %>% mutate(churn= as.factor(churn))
+churn <- churn %>% drop_na()
+dim(churn)
+```
+# split the data
+```{r}
+set.seed(222)
+churn_split <-initial_split(churn,
+                              prop = 0.8,
+                              strata ="churn" )
+churn_train <- training(churn_split)
+churn_test <- testing(churn_split)
+churn_split
+```
+# set the recipies
+```{r}
+rec_churn <- recipe(churn~.,churn_train)
+```
+
+```{r}
+churn_rec <- rec_churn %>% 
+  step_normalize(all_numeric_predictors()) %>% 
+  step_dummy(all_nominal_predictors()) %>%
+  prep() 
+  churn_rec
+```
+# bake the training data
+```{r}
+churn_train_proc <-bake(churn_rec,churn_train)
+churn_train_proc
+```
+# 1. set the logistic specification
+```{r}
+logit_spec <- logistic_reg() %>%
+ set_engine("glm") %>%
+  set_mode("classification")
+```
+# train the model
+```{r}
+logit_fit <- logit_spec %>% 
+  fit(churn  ~. , churn_train_proc)
+logit_fit$fit
+```
+# bake the testig data
+```{r}
+test_train_proc <-bake(churn_rec,churn_test)
+test_train_proc
+```
+# make prediction
+```{r}
+churn_pred <- predict(logit_fit, test_train_proc)
+churn_pred
+```
+
+```{r}
+churn_test_proc_final <- test_train_proc %>% 
+     dplyr::bind_cols(churn_pred)
+churn_test_proc_final
+```
+# evaluation of the logistic model
+## accurancy
+```{r}
+yardstick::accuracy(churn_test_proc_final,churn,.pred_class)
+
+```
+# 2. K-Nearest Neighbors
+## set the model specification
+```{r}
+knn_spec <- nearest_neighbor() %>%
+ set_engine("kknn") %>%
+  set_mode("classification")
+```
+
+# train the model
+```{r}
+knn_fit <- knn_spec %>% 
+  fit(churn  ~. , churn_train_proc)
+knn_fit$fit
+```
+
+# make prediction
+```{r}
+knn_churn_pred <- predict(knn_fit, test_train_proc)
+knn_churn_pred
+```
+
+```{r}
+knn_churn_test_final <- test_train_proc %>% 
+     dplyr::bind_cols(knn_churn_pred)
+knn_churn_test_final
+```
+## accurancy
+```{r}
+yardstick::accuracy(knn_churn_test_final,churn,.pred_class)
+
+```
+
+# 3.Decision Tree
+## set the model specification
+```{r}
+dec_tree_spec <- decision_tree() %>%
+ set_engine("rpart") %>%
+  set_mode("classification")
+```
+
+# train the model
+```{r}
+dec_tree_fit <- dec_tree_spec %>% 
+  fit(churn  ~. , churn_train_proc)
+```
+
+# make prediction
+```{r}
+dec_tree_churn_pred <- predict(dec_tree_fit, test_train_proc)
+dec_tree_churn_pred
+```
+
+```{r}
+dec_tree_churn_test_final <- test_train_proc %>% 
+     dplyr::bind_cols(dec_tree_churn_pred)
+dec_tree_churn_test_final
+```
+
+## accurancy
+```{r}
+yardstick::accuracy(dec_tree_churn_test_final,churn,.pred_class)
+
+```
+
+# 4. Random Forest
+## set the model specification
+```{r}
+random_spec <- rand_forest() %>%
+ set_engine("ranger") %>%
+  set_mode("classification")
+```
+
+# train the model
+```{r}
+random_fit <- random_spec %>% 
+  fit(churn  ~. , churn_train_proc)
+random_fit$fit
+```
+
+# make prediction
+```{r}
+random_churn_pred <- predict(random_fit, test_train_proc)
+random_churn_pred
+```
+
+```{r}
+random_churn_test_final <- test_train_proc %>% 
+     dplyr::bind_cols(random_churn_pred)
+random_churn_test_final
+```
+
+## accurancy
+```{r}
+yardstick::accuracy(random_churn_test_final,churn,.pred_class)
+
+```
+### The model with the highest accurancy is the logistic regression with 0.806
+
+# predect new churn
+## import the new data
+```{r}
+new_churn <- read_xlsx("new_customers_data.xlsx")
+str(new_churn)
+```
+## clean the data
+```{r}
+new_churn_clean <- new_churn %>% mutate(SeniorCitizen= ifelse(SeniorCitizen==1,"Yes","No"))
+new_churn_clean <- new_churn_clean %>% mutate_if(is.character,as.factor)
+new_churn_clean <- new_churn_clean %>% select(-1)
+new_churn_clean<- clean_names(new_churn_clean)
+new_churn_clean <- drop_na(new_churn_clean)
+```
+
+## data preproc
+```{r}
+new_churn_proc<-bake(churn_rec,new_churn_clean)
+```
+
+## predection
+```{r}
+new_churn_predection<-predict(logit_fit,new_churn_proc,type = "prob")
+new_churn_predection<- new_churn_predection %>% select(-1)
+new_churn_predection
+```
+
+## customers churn categories
+```{r}
+new_churn_final <- new_churn %>% 
+  dplyr::bind_cols(new_churn_predection)
+new_churn_final<-new_churn_final %>%
+  mutate(churn=ifelse(.pred_1<=0.50,"low risk",ifelse(.pred_1<=0.80,"medium risk","high risk"))) %>% 
+  mutate_if(is.character,as.factor)
+new_churn_final
+```
+
+###	Store these predictions in and Excel file
+
+```{r}
+library(writexl)
+
+write_xlsx(new_churn_final , "new churn predection.xlsx")
+
+```
+## churn visualization
+```{r}
+new_churn_final %>% ggplot(aes(x=churn))+
+  geom_bar(color="blue",fill="yellow")
+```
+
+## suggest
+### for high risk churn cutomers it's better to give them free extra GB and munits and send new offres and make a servy to indurstend the problem with fiber optic because it's the service withe more churn
+### for the medium risk churn customers send more offres and give them some extra free days in ther subscribtions
+### for the low risk customer it's enough to send new offres
+
+### fix the problem of electronic check
+
+
